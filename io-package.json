@@ -1,0 +1,125 @@
+{
+  "common": {
+    "name": "mopeka",
+    "version": "0.0.1",
+    "news": {
+      "0.0.1": {
+        "en": "initial release",
+        "de": "Erstveröffentlichung",
+        "ru": "первый релиз",
+        "pt": "lançamento inicial",
+        "nl": "eerste release",
+        "fr": "première version",
+        "it": "rilascio iniziale",
+        "es": "lanzamiento inicial",
+        "pl": "pierwsze wydanie",
+        "uk": "первый релиз",
+        "zh-cn": "初始版本"
+      }
+    },
+    "titleLang": {
+      "en": "Mopeka tank sensors",
+      "de": "Mopeka-Tanksensoren",
+      "ru": "Датчики бака Mopeka",
+      "pt": "Sensores de tanque Mopeka",
+      "nl": "Mopeka tanksensoren",
+      "fr": "Capteurs de réservoir Mopeka",
+      "it": "Sensori serbatoio Mopeka",
+      "es": "Sensores de tanque Mopeka",
+      "pl": "Czujniki zbiornika Mopeka",
+      "uk": "Датчики бака Mopeka",
+      "zh-cn": "Mopeka 液位传感器"
+    },
+    "desc": {
+      "en": "Reads Mopeka BLE tank-level sensors — directly via a Bluetooth controller or through the ble-gateway adapter",
+      "de": "Liest Mopeka BLE-Tankfüllstandssensoren — direkt über einen Bluetooth-Controller oder über den ble-gateway-Adapter",
+      "ru": "Считывает датчики уровня бака Mopeka BLE — напрямую через Bluetooth-контроллер или через адаптер ble-gateway",
+      "pt": "Lê sensores de nível de tanque Mopeka BLE — diretamente via um controlador Bluetooth ou através do adaptador ble-gateway",
+      "nl": "Leest Mopeka BLE-tankniveausensoren — rechtstreeks via een Bluetooth-controller of via de ble-gateway-adapter",
+      "fr": "Lit les capteurs de niveau de réservoir Mopeka BLE — directement via un contrôleur Bluetooth ou via l'adaptateur ble-gateway",
+      "it": "Legge i sensori di livello serbatoio Mopeka BLE — direttamente tramite un controller Bluetooth o tramite l'adattatore ble-gateway",
+      "es": "Lee sensores de nivel de tanque Mopeka BLE — directamente a través de un controlador Bluetooth o mediante el adaptador ble-gateway",
+      "pl": "Odczytuje czujniki poziomu zbiornika Mopeka BLE — bezpośrednio przez kontroler Bluetooth lub przez adapter ble-gateway",
+      "uk": "Зчитує датчики рівня бака Mopeka BLE — безпосередньо через Bluetooth-контролер або через адаптер ble-gateway",
+      "zh-cn": "读取 Mopeka BLE 液位传感器 — 直接通过蓝牙控制器或通过 ble-gateway 适配器"
+    },
+    "authors": [
+      "bluefox <dogafox@gmail.com>"
+    ],
+    "keywords": [
+      "mopeka",
+      "tank",
+      "propane",
+      "lpg",
+      "ble",
+      "bluetooth"
+    ],
+    "licenseInformation": {
+      "type": "free",
+      "license": "MIT"
+    },
+    "platform": "Javascript/Node.js",
+    "icon": "mopeka.png",
+    "enabled": true,
+    "extIcon": "https://raw.githubusercontent.com/ioBroker/ioBroker.mopeka/master/admin/mopeka.png",
+    "readme": "https://github.com/ioBroker/ioBroker.mopeka/blob/master/README.md",
+    "loglevel": "info",
+    "mode": "daemon",
+    "type": "energy",
+    "adminUI": {
+      "config": "json"
+    },
+    "compact": true,
+    "messagebox": true,
+    "tier": 3,
+    "dependencies": [
+      {
+        "js-controller": ">=6.0.11"
+      }
+    ],
+    "globalDependencies": [
+      {
+        "admin": ">=7.6.20"
+      }
+    ],
+    "osDependencies": {
+      "linux": [
+        "bluez",
+        "libbluetooth-dev"
+      ]
+    },
+    "connectionType": "local",
+    "dataSource": "poll"
+  },
+  "native": {
+    "source": "direct",
+    "hciDevice": "",
+    "gatewayInstance": "ble-gateway.0",
+    "scanDurationMs": 10000,
+    "sensors": []
+  },
+  "objects": [],
+  "instanceObjects": [
+    {
+      "_id": "info",
+      "type": "channel",
+      "common": {
+        "name": "Information"
+      },
+      "native": {}
+    },
+    {
+      "_id": "info.connection",
+      "type": "state",
+      "common": {
+        "role": "indicator.connected",
+        "name": "BLE source active",
+        "type": "boolean",
+        "read": true,
+        "write": false,
+        "def": false
+      },
+      "native": {}
+    }
+  ]
+}

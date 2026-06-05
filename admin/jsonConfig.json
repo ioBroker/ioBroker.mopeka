@@ -1,0 +1,143 @@
+{
+    "i18n": true,
+    "type": "tabs",
+    "items": {
+        "_main": {
+            "type": "panel",
+            "label": "Main settings",
+            "items": {
+                "source": {
+                    "type": "select",
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 4,
+                    "xl": 4,
+                    "default": "direct",
+                    "label": "BLE source",
+                    "help": "Read sensors directly via an own Bluetooth controller, or through the central ble-gateway adapter.",
+                    "options": [
+                        { "value": "direct", "label": "Direct (own controller)" },
+                        { "value": "gateway", "label": "Via ble-gateway" }
+                    ]
+                },
+                "hciDevice": {
+                    "newLine": true,
+                    "type": "selectSendTo",
+                    "command": "listHciAdapters",
+                    "manual": true,
+                    "hidden": "data.source !== 'direct'",
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 4,
+                    "xl": 4,
+                    "default": "",
+                    "label": "Bluetooth adapter",
+                    "help": "Selects the Bluetooth controller by MAC address (BD_ADDR). MAC is stable across reboots, hciX numbering is not."
+                },
+                "gatewayInstance": {
+                    "newLine": true,
+                    "type": "instance",
+                    "adapter": "ble-gateway",
+                    "hidden": "data.source !== 'gateway'",
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 4,
+                    "lg": 4,
+                    "xl": 4,
+                    "default": "ble-gateway.0",
+                    "label": "BLE gateway instance",
+                    "help": "Which ble-gateway instance to subscribe to."
+                },
+                "scanDurationMs": {
+                    "newLine": true,
+                    "type": "number",
+                    "min": 1000,
+                    "max": 60000,
+                    "step": 500,
+                    "xs": 12,
+                    "sm": 6,
+                    "md": 3,
+                    "lg": 3,
+                    "xl": 3,
+                    "default": 10000,
+                    "label": "Scan duration (ms)",
+                    "help": "How long the discovery scan should run."
+                }
+            }
+        },
+        "_sensors": {
+            "type": "panel",
+            "label": "Sensors",
+            "items": {
+                "_scan": {
+                    "type": "sendTo",
+                    "command": "scan",
+                    "jsonData": "{ \"duration\": ${data.scanDurationMs} }",
+                    "useNative": true,
+                    "variant": "contained",
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 4,
+                    "lg": 4,
+                    "xl": 4,
+                    "label": "Scan for Mopeka sensors",
+                    "help": "Runs a BLE discovery scan via the configured source and adds nearby Mopeka sensors to the table. Save the main settings first."
+                },
+                "sensors": {
+                    "newLine": true,
+                    "type": "table",
+                    "label": "Configured sensors",
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 12,
+                    "lg": 12,
+                    "xl": 12,
+                    "items": [
+                        {
+                            "title": "Enabled",
+                            "attr": "enabled",
+                            "type": "checkbox",
+                            "default": true,
+                            "width": 80
+                        },
+                        {
+                            "title": "Name",
+                            "attr": "name",
+                            "type": "text",
+                            "default": "",
+                            "filter": true
+                        },
+                        {
+                            "title": "MAC address",
+                            "attr": "mac",
+                            "type": "text",
+                            "default": "",
+                            "filter": true
+                        },
+                        {
+                            "title": "Medium",
+                            "attr": "medium",
+                            "type": "select",
+                            "default": "propane",
+                            "options": [
+                                { "value": "propane", "label": "Propane / LPG" },
+                                { "value": "air", "label": "Air / fuel / oil" },
+                                { "value": "water", "label": "Water" }
+                            ],
+                            "width": 140
+                        },
+                        {
+                            "title": "Tank height (mm)",
+                            "attr": "tankFullMm",
+                            "type": "number",
+                            "default": 0,
+                            "width": 140
+                        }
+                    ]
+                }
+            }
+        }
+    }
+}
