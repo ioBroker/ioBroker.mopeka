@@ -17,7 +17,7 @@ const MEDIUM_COEFFICIENTS: Record<MediumType, [number, number, number]> = {
     water: [0.600592, 0.003124, -0.00001368],
 };
 
-// Hardware-id (payload byte 0) → human readable model name.
+// Hardware-id (payload byte 0) → human-readable model name.
 const MODELS: Record<number, string> = {
     0x3: 'Pro Check',
     0x4: 'Pro-200',

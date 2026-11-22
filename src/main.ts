@@ -138,6 +138,7 @@ interface StateDef {
     type: 'number' | 'string' | 'boolean';
     role: string;
     unit?: string;
+    states?: Record<string, string>;
 }
 
 const SENSOR_STATES: StateDef[] = [
@@ -146,7 +147,13 @@ const SENSOR_STATES: StateDef[] = [
     { id: 'temperature', name: 'Temperature', type: 'number', role: 'value.temperature', unit: '°C' },
     { id: 'battery_v', name: 'Battery voltage', type: 'number', role: 'value.voltage', unit: 'V' },
     { id: 'battery_pct', name: 'Battery level', type: 'number', role: 'value.battery', unit: '%' },
-    { id: 'quality', name: 'Reading quality (0-3)', type: 'number', role: 'value' },
+    {
+        id: 'quality',
+        name: 'Reading quality (0-3)',
+        type: 'number',
+        role: 'value',
+        states: { 0: 'No valid read', 1: 'Poor contact', 2: 'Normal', 3: 'Optimal' },
+    },
     { id: 'quality_pct', name: 'Reading quality', type: 'number', role: 'value', unit: '%' },
     { id: 'button', name: 'Sync button pressed', type: 'boolean', role: 'indicator' },
     { id: 'rssi', name: 'Signal strength', type: 'number', role: 'value.rssi', unit: 'dBm' },
@@ -349,6 +356,9 @@ class MopekaAdapter extends Adapter {
                 };
                 if (s.type === 'number' && s.unit) {
                     common.unit = s.unit;
+                }
+                if (s.states) {
+                    common.states = s.states;
                 }
                 await this.setObjectNotExistsAsync(`${devId}.${s.id}`, {
                     type: 'state',
