@@ -39,6 +39,20 @@
 //           this.ble.destroy().finally(cb);
 //       }
 //   }
+//
+// GATT (connect / read / write / notify) through the gateway:
+//
+//   const conn = await this.ble.gattConnect('aa:bb:cc:dd:ee:ff');
+//   try {
+//       await conn.subscribe('fff1', data => this.log.info(`notify ${data.toString('hex')}`));
+//       await conn.write('fff2', Buffer.from('0102', 'hex'));
+//       const value = await conn.read('2a19');
+//   } finally {
+//       await conn.disconnect();
+//   }
+//
+// `handleMessage` must be called for every message: notifications arrive as
+// 'gattNotify', unexpected link loss as 'gattDisconnected' (see onDisconnect).
 // ---------------------------------------------------------------------------
 
 export interface BleGatewayFilter {
@@ -83,6 +97,21 @@ interface Entry {
     handler: PacketHandler;
 }
 
+/** A characteristic of a connected device. UUIDs are lowercase, short form where possible ("fff1"). */
+export interface BleGattCharacteristic {
+    serviceUuid: string;
+    uuid: string;
+    /** e.g. ["read", "write", "writeWithoutResponse", "notify"] */
+    properties: string[];
+}
+
+export interface BleGattConnectOptions {
+    /** How long the device may take to show up in the scan (default 15000 ms). */
+    discoverTimeoutMs?: number;
+    /** How long the link may take to come up (default 15000 ms). */
+    connectTimeoutMs?: number;
+}
+
 // Minimal slice of the ioBroker Adapter API this helper needs.
 interface AdapterLike {
     log: { info(m: string): void; warn(m: string): void; error(m: string): void; debug(m: string): void };
@@ -98,15 +127,136 @@ interface AdapterLike {
     getForeignStateAsync(id: string): Promise<{ val: unknown } | null | undefined>;
 }
 
+// Same canonical form as the gateway: "0000FFF1-0000-1000-8000-00805F9B34FB" → "fff1".
+function normalizeUuid(u: string): string {
+    const s = (u || '').toLowerCase().replace(/[^0-9a-f]/g, '');
+    if (s.length === 32 && s.startsWith('0000') && s.endsWith('00001000800000805f9b34fb')) {
+        return s.slice(4, 8);
+    }
+    return s;
+}
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 // The gateway may wait up to 15 s for the controller to power on before it answers a subscribe.
 const SUBSCRIBE_TIMEOUT_MS = 20000;
-const UNSUBSCRIBE_TIMEOUT_MS = 2000;
 // Delay after the gateway's `alive` turned true, so it can finish its start-up first.
 const RESUBSCRIBE_DELAY_MS = 2000;
 // Delay before a subscribe that got no answer is sent again.
 const RETRY_DELAY_MS = 10000;
 
-type SendResult = { ok: true; result: unknown } | { ok: false; error: string; timeout: boolean };
+/** Rejection of `request()` when the gateway did not answer in time. */
+export class BleGatewayTimeoutError extends Error {}
+
+/** An open GATT connection held by the gateway on behalf of this adapter. */
+export class BleGattConnection {
+    public readonly id: string;
+    public readonly address: string;
+    public readonly characteristics: BleGattCharacteristic[];
+    private readonly client: BleGatewayClient;
+    private readonly notifyHandlers = new Map<string, (data: Buffer) => void>();
+    private readonly disconnectHandlers: ((reason: string) => void)[] = [];
+    private closed = false;
+
+    // Internal: created by BleGatewayClient.gattConnect().
+    public constructor(
+        client: BleGatewayClient,
+        id: string,
+        address: string,
+        characteristics: BleGattCharacteristic[],
+    ) {
+        this.client = client;
+        this.id = id;
+        this.address = address;
+        this.characteristics = characteristics;
+    }
+
+    public isOpen(): boolean {
+        return !this.closed;
+    }
+
+    /** Find a characteristic by UUID (short or long form). */
+    public findCharacteristic(uuid: string): BleGattCharacteristic | undefined {
+        const want = normalizeUuid(uuid);
+        return this.characteristics.find(c => c.uuid === want);
+    }
+
+    /** Enable notifications; `onData` receives every notified value. */
+    public async subscribe(characteristic: string, onData: (data: Buffer) => void, service?: string): Promise<void> {
+        this.notifyHandlers.set(this.key(characteristic, service), onData);
+        await this.client.request('gattSubscribe', { connectionId: this.id, characteristic, service });
+    }
+
+    public async unsubscribe(characteristic: string, service?: string): Promise<void> {
+        this.notifyHandlers.delete(this.key(characteristic, service));
+        await this.client.request('gattUnsubscribe', { connectionId: this.id, characteristic, service });
+    }
+
+    /** Write a value. `withoutResponse` = write command instead of write request. */
+    public async write(characteristic: string, data: Buffer, withoutResponse = false, service?: string): Promise<void> {
+        await this.client.request('gattWrite', {
+            connectionId: this.id,
+            characteristic,
+            service,
+            data: data.toString('hex'),
+            withoutResponse,
+        });
+    }
+
+    public async read(characteristic: string, service?: string): Promise<Buffer> {
+        const r = await this.client.request<{ data?: string }>('gattRead', {
+            connectionId: this.id,
+            characteristic,
+            service,
+        });
+        return Buffer.from(r?.data || '', 'hex');
+    }
+
+    /** Close the link. Safe to call twice or after the link dropped. */
+    public async disconnect(): Promise<void> {
+        if (this.closed) {
+            return;
+        }
+        this.closed = true;
+        this.client.forget(this.id);
+        try {
+            await this.client.request('gattDisconnect', { connectionId: this.id });
+        } catch {
+            // already gone on the gateway side
+        }
+    }
+
+    /** Called when the link drops without disconnect() (device gone, gateway restarted, ...). */
+    public onDisconnect(cb: (reason: string) => void): void {
+        this.disconnectHandlers.push(cb);
+    }
+
+    // Internal: called by BleGatewayClient.handleMessage().
+    public dispatchNotify(characteristic: string, service: string, data: Buffer): void {
+        const uuid = normalizeUuid(characteristic);
+        const handler = this.notifyHandlers.get(`${normalizeUuid(service)}/${uuid}`) || this.notifyHandlers.get(uuid);
+        handler?.(data);
+    }
+
+    // Internal: called by BleGatewayClient.handleMessage().
+    public dispatchDisconnect(reason: string): void {
+        if (this.closed) {
+            return;
+        }
+        this.closed = true;
+        for (const cb of this.disconnectHandlers) {
+            try {
+                cb(reason);
+            } catch {
+                // ignore
+            }
+        }
+    }
+
+    private key(characteristic: string, service?: string): string {
+        const uuid = normalizeUuid(characteristic);
+        return service ? `${normalizeUuid(service)}/${uuid}` : uuid;
+    }
+}
 
 export class BleGatewayClient {
     private readonly adapter: AdapterLike;
@@ -114,6 +264,7 @@ export class BleGatewayClient {
     private readonly aliveId: string;
     private readonly onConnectionChange?: (connected: boolean) => void;
     private readonly entries = new Map<string, Entry>();
+    private readonly gattConnections = new Map<string, BleGattConnection>();
     // subscription ids waiting to be (re)sent to the gateway
     private readonly pending = new Set<string>();
     private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -177,28 +328,130 @@ export class BleGatewayClient {
             this.pending.clear();
         }
         if (this.gatewayAlive) {
-            await this.send('unsubscribe', subscriptionId ? { subscriptionId } : {}, UNSUBSCRIBE_TIMEOUT_MS);
+            await this.send('unsubscribe', subscriptionId ? { subscriptionId } : {});
         }
     }
 
-    /** Call from your adapter's `message` handler. Returns true if it was a packet for us. */
+    /**
+     * Open a GATT connection to a device through the gateway. The device must
+     * advertise within `discoverTimeoutMs`. Always call `disconnect()` when done.
+     */
+    public async gattConnect(address: string, opts: BleGattConnectOptions = {}): Promise<BleGattConnection> {
+        // Watch the gateway, so its connections are reported as lost when it stops.
+        await this.ensureWatching();
+        if (!this.gatewayAlive) {
+            throw new Error(`${this.gateway} is not running`);
+        }
+        const discoverTimeoutMs = opts.discoverTimeoutMs ?? 15000;
+        const connectTimeoutMs = opts.connectTimeoutMs ?? 15000;
+        const r = await this.request<{
+            connectionId: string;
+            address: string;
+            characteristics: BleGattCharacteristic[];
+        }>(
+            'gattConnect',
+            { address: address.toLowerCase(), discoverTimeoutMs, connectTimeoutMs },
+            // discovery + link + service discovery (10 s on the gateway) + margin
+            discoverTimeoutMs + connectTimeoutMs + 15000,
+        );
+        const conn = new BleGattConnection(this, r.connectionId, r.address, r.characteristics || []);
+        this.gattConnections.set(conn.id, conn);
+        return conn;
+    }
+
+    /**
+     * Send a command to the gateway and wait for its answer. Rejects if the
+     * gateway answers `{ error }` or does not answer within `timeoutMs`.
+     */
+    public request<T = Record<string, unknown>>(
+        command: string,
+        message: unknown,
+        timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    ): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            let settled = false;
+            const timer = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    reject(
+                        new BleGatewayTimeoutError(`${this.gateway} did not answer ${command} within ${timeoutMs} ms`),
+                    );
+                }
+            }, timeoutMs);
+            this.adapter.sendTo(
+                this.gateway,
+                command,
+                message,
+                (res: unknown) => {
+                    if (settled) {
+                        return;
+                    }
+                    settled = true;
+                    clearTimeout(timer);
+                    const r = res as { error?: unknown } | null | undefined;
+                    if (res instanceof Error) {
+                        reject(res);
+                    } else if (r && typeof r === 'object' && r.error) {
+                        reject(new Error(typeof r.error === 'string' ? r.error : JSON.stringify(r.error)));
+                    } else {
+                        resolve(res as T);
+                    }
+                },
+                { timeout: timeoutMs + 1000 },
+            );
+        });
+    }
+
+    // Internal: a connection closed itself.
+    public forget(connectionId: string): void {
+        this.gattConnections.delete(connectionId);
+    }
+
+    /** Call from your adapter's `message` handler. Returns true if the message was for this helper. */
     public handleMessage(obj: ioBroker.Message | undefined): boolean {
-        if (!obj || obj.command !== 'blePacket') {
+        if (!obj) {
             return false;
         }
-        const raw = obj.message as RawPacket;
-        const entry = this.entries.get(raw.subscriptionId);
-        if (!entry) {
-            return true; // ours by command, but no live handler — swallow it
+        switch (obj.command) {
+            case 'blePacket': {
+                const raw = obj.message as RawPacket;
+                const entry = this.entries.get(raw.subscriptionId);
+                if (entry) {
+                    entry.handler(this.decode(raw));
+                }
+                return true; // ours by command, even without a live handler
+            }
+            case 'gattNotify': {
+                const m = obj.message as {
+                    connectionId: string;
+                    service: string;
+                    characteristic: string;
+                    data: string;
+                };
+                this.gattConnections
+                    .get(m?.connectionId)
+                    ?.dispatchNotify(m.characteristic, m.service || '', Buffer.from(m.data || '', 'hex'));
+                return true;
+            }
+            case 'gattDisconnected': {
+                const m = obj.message as { connectionId: string; reason?: string };
+                const conn = this.gattConnections.get(m?.connectionId);
+                if (conn) {
+                    this.gattConnections.delete(conn.id);
+                    conn.dispatchDisconnect(m.reason || 'unknown');
+                }
+                return true;
+            }
+            default:
+                return false;
         }
-        entry.handler(this.decode(raw));
-        return true;
     }
 
     /**
      * Call from your adapter's `stateChange` handler. Watches the gateway's `alive` state:
-     * the gateway forgets all subscriptions when it restarts, so they are sent again
-     * as soon as it is back.
+     * the gateway forgets all subscriptions and GATT connections when it restarts, so
+     * subscriptions are sent again as soon as it is back and open connections are
+     * reported via `onDisconnect`.
      */
     public handleStateChange(id: string, state: ioBroker.State | null | undefined): void {
         if (id !== this.aliveId || !this.aliveKnown || this.destroyed) {
@@ -221,18 +474,28 @@ export class BleGatewayClient {
             this.clearFlushTimer();
             this.pending.clear();
             this.setConnected(false);
+            const conns = [...this.gattConnections.values()];
+            this.gattConnections.clear();
+            for (const conn of conns) {
+                conn.dispatchDisconnect('gateway stopped');
+            }
         }
     }
 
-    /** Unsubscribe everything and stop watching the gateway. Call from onUnload. */
+    /** Unsubscribe everything, close all GATT connections and stop watching the gateway. Call from onUnload. */
     public async destroy(): Promise<void> {
         this.destroyed = true;
         this.clearFlushTimer();
         this.pending.clear();
-        this.entries.clear();
-        if (this.gatewayAlive) {
-            await this.send('unsubscribe', {}, UNSUBSCRIBE_TIMEOUT_MS);
+        // An "unsubscribe all" makes the gateway close our GATT connections too.
+        if (this.gatewayAlive || !this.aliveKnown) {
+            await this.send('unsubscribe', {});
         }
+        for (const conn of this.gattConnections.values()) {
+            conn.dispatchDisconnect('client destroyed');
+        }
+        this.gattConnections.clear();
+        this.entries.clear();
         if (this.watching) {
             this.watching = null;
             try {
@@ -252,7 +515,7 @@ export class BleGatewayClient {
                 const st = await this.adapter.getForeignStateAsync(this.aliveId);
                 this.gatewayAlive = !!st?.val;
             } catch (e) {
-                // Unknown state: try to subscribe anyway, a missing gateway shows up as a timeout.
+                // Unknown state: try anyway, a missing gateway shows up as a timeout.
                 this.adapter.log.debug(`${this.gateway} watch failed: ${(e as Error).message}`);
                 this.gatewayAlive = true;
             }
@@ -301,65 +564,43 @@ export class BleGatewayClient {
         if (!entry) {
             return;
         }
-        const res = await this.send(
-            'subscribe',
-            { subscriptionId, filter: entry.filter, minIntervalMs: entry.minIntervalMs },
-            SUBSCRIBE_TIMEOUT_MS,
-        );
+        let error: unknown = null;
+        try {
+            await this.request(
+                'subscribe',
+                { subscriptionId, filter: entry.filter, minIntervalMs: entry.minIntervalMs },
+                SUBSCRIBE_TIMEOUT_MS,
+            );
+        } catch (e) {
+            error = e;
+        }
         if (this.destroyed || this.entries.get(subscriptionId) !== entry) {
             return; // unsubscribed or replaced meanwhile
         }
-        if (res.ok) {
-            const r = res.result as { ok?: boolean; error?: string } | undefined;
-            if (!r?.error) {
-                this.setConnected(true);
-                return;
-            }
-            this.adapter.log.warn(`${this.gateway} subscribe '${subscriptionId}' failed: ${r.error}`);
-            this.setConnected(false);
+        if (!error) {
+            this.setConnected(true);
             return;
         }
         this.setConnected(false);
         if (!this.gatewayAlive) {
             return; // the gateway stopped meanwhile — sent again when it is back
         }
-        if (res.timeout) {
+        if (error instanceof BleGatewayTimeoutError) {
             // The gateway may still be starting up — try again.
             this.adapter.log.warn(`${this.gateway} did not answer subscribe '${subscriptionId}' — retrying`);
             this.queueSubscribe([subscriptionId], RETRY_DELAY_MS);
         } else {
-            this.adapter.log.warn(`${this.gateway} subscribe '${subscriptionId}' failed: ${res.error}`);
+            this.adapter.log.warn(`${this.gateway} subscribe '${subscriptionId}' failed: ${(error as Error).message}`);
         }
     }
 
-    /** sendTo with a timeout, so a stopped gateway never leaves us waiting. */
-    private send(command: string, message: unknown, timeoutMs: number): Promise<SendResult> {
-        return new Promise<SendResult>(resolve => {
-            // Own timer as well: older js-controllers ignore the timeout option. Only the first resolve() counts.
-            const timer = setTimeout(() => resolve({ ok: false, error: 'timeout', timeout: true }), timeoutMs);
-            const finish = (r: SendResult): void => {
-                clearTimeout(timer);
-                resolve(r);
-            };
-            try {
-                this.adapter.sendTo(
-                    this.gateway,
-                    command,
-                    message,
-                    (result: unknown) => {
-                        if (result instanceof Error) {
-                            const timeout = /timeout/i.test(result.message);
-                            finish({ ok: false, error: result.message, timeout });
-                        } else {
-                            finish({ ok: true, result });
-                        }
-                    },
-                    { timeout: timeoutMs },
-                );
-            } catch (e) {
-                finish({ ok: false, error: (e as Error).message, timeout: false });
-            }
-        });
+    // Fire a command and wait for the answer, but never hang (gateway may be down).
+    private async send(command: string, message: unknown): Promise<void> {
+        try {
+            await this.request(command, message, 5000);
+        } catch (e) {
+            this.adapter.log.debug(`${this.gateway} ${command}: ${(e as Error).message}`);
+        }
     }
 
     private decode(raw: RawPacket): BleGatewayPacket {
