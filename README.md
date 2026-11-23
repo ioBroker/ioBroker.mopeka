@@ -73,7 +73,7 @@ Without a tank height the bottle shows the level in mm. The sources are in `src-
    Placeholder for the next version (at the beginning of the line):
    ### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 0.0.2 (2026-11-23)
 * (@GermanBluefox) Admin 8.3.10 or newer is required now
 * (@GermanBluefox) Translated the instance settings into all languages
 * (@GermanBluefox) Added the device manager: scan, edit, enable/disable and delete sensors
