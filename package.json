@@ -1,6 +1,6 @@
 {
   "name": "iobroker.mopeka",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Reads Mopeka BLE tank-level sensors (direct or via ble-gateway) into ioBroker",
   "author": {
     "name": "bluefox",

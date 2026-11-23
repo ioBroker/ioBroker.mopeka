@@ -76,7 +76,7 @@ Without a tank height the bottle shows the level in mm. The sources are in `src-
    Placeholder for the next version (at the beginning of the line):
    ### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 0.0.4 (2026-11-23)
 * (@GermanBluefox) Updated packages
 
 ### 0.0.3 (2026-11-23)
