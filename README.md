@@ -2,7 +2,10 @@
 
 # ioBroker.mopeka
 
-Reads **Mopeka** BLE tank-level sensors (Pro Check, Pro Plus, Pro Check H2O, TD40/TD200, Universal …) into ioBroker. Mopeka sensors broadcast their readings passively in the BLE advertisement, so no connection is needed.
+Reads **Mopeka** BLE tank-level sensors (Pro Check, Pro Plus, Pro Check H2O, TD40/TD200, Universal …) into ioBroker.
+Mopeka sensors broadcast their readings passively in the BLE advertisement, so no connection is needed.
+
+You can find the more information about sensors here: https://mopeka.com/consumer-solutions/
 
 ## BLE source — direct or via ble-gateway
 
@@ -73,6 +76,9 @@ Without a tank height the bottle shows the level in mm. The sources are in `src-
    Placeholder for the next version (at the beginning of the line):
    ### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+* (@GermanBluefox) Updated packages
+
 ### 0.0.3 (2026-11-23)
 * (@GermanBluefox) The adapter is published to npm via trusted publishing
 
