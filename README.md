@@ -73,6 +73,9 @@ Without a tank height the bottle shows the level in mm. The sources are in `src-
    Placeholder for the next version (at the beginning of the line):
    ### **WORK IN PROGRESS**
 -->
+### 0.0.3 (2026-11-23)
+* (@GermanBluefox) The adapter is published to npm via trusted publishing
+
 ### 0.0.2 (2026-11-23)
 * (@GermanBluefox) Admin 8.3.10 or newer is required now
 * (@GermanBluefox) Translated the instance settings into all languages

@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "mopeka",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "news": {
+      "0.0.3": {
+        "en": "The adapter is published to npm via trusted publishing",
+        "de": "Der Adapter wurde über Trusted Publishing auf NPM veröffentlicht",
+        "ru": "Адаптер публикуется в npm через доверенную публикацию",
+        "pt": "O adaptador é publicado no npm via publicação confiável",
+        "nl": "De adapter wordt via Trusted Publishing naar npm gepubliceerd",
+        "fr": "L'adaptateur est publié sur npm via Trusted Publishing",
+        "it": "L'adattatore è pubblicato su npm tramite Trusted Publishing",
+        "es": "El adaptador se publica en npm mediante Trusted Publishing",
+        "pl": "Adapter jest publikowany do npm za pośrednictwem zaufanego publikowania",
+        "uk": "Адаптер публікується в npm через довірену публікацію",
+        "zh-cn": "适配器通过可信发布到 npm"
+      },
       "0.0.2": {
         "en": "Admin 8.3.10 or newer is required now\nTranslated the instance settings into all languages\nAdded the device manager: scan, edit, enable/disable and delete sensors\nAdded the gas bottle widget for vis-2, devices, Aura and the admin tab \"Overview\"\nGateway mode: subscribes again after a restart of ble-gateway\nInitial version: Mopeka sensors via direct BLE or ble-gateway, with discovery scan and tank calibration per sensor",
         "de": "Admin 8.3.10 oder neuer ist jetzt erforderlich\nInstanzeinstellungen in alle Sprachen übersetzt\nGeräteverwaltung hinzugefügt: Sensoren suchen, bearbeiten, aktivieren/deaktivieren und löschen\nGasflaschen-Widget für vis-2, devices, Aura und den Admin-Tab „Übersicht“ hinzugefügt\nGateway-Modus: meldet sich nach einem Neustart von ble-gateway wieder an\nErste Version: Mopeka-Sensoren direkt per BLE oder über ble-gateway, mit Sensorsuche und Tankkalibrierung je Sensor",
