@@ -28,6 +28,9 @@
 //           });
 //       }
 //
+//       // stateChange must reach ble.handleStateChange(): it watches the gateway's
+//       // `alive` state and re-subscribes when the gateway restarts.
+//
 //       onMessage(obj) {
 //           if (this.ble.handleMessage(obj)) return; // consumed a 'blePacket'
 //           // ... your own commands
@@ -40,40 +43,69 @@
 // ---------------------------------------------------------------------------
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BleGatewayClient = void 0;
+// The gateway may wait up to 15 s for the controller to power on before it answers a subscribe.
+const SUBSCRIBE_TIMEOUT_MS = 20000;
+const UNSUBSCRIBE_TIMEOUT_MS = 2000;
+// Delay after the gateway's `alive` turned true, so it can finish its start-up first.
+const RESUBSCRIBE_DELAY_MS = 2000;
+// Delay before a subscribe that got no answer is sent again.
+const RETRY_DELAY_MS = 10000;
 class BleGatewayClient {
     adapter;
     gateway;
-    connId;
+    aliveId;
+    onConnectionChange;
     entries = new Map();
-    watching = false;
-    lastConnected = false;
+    // subscription ids waiting to be (re)sent to the gateway
+    pending = new Set();
+    flushTimer = null;
+    watching = null;
+    aliveKnown = false;
+    gatewayAlive = false;
+    connected = false;
+    destroyed = false;
     /**
      * @param adapter your adapter instance (`this`)
      * @param gatewayInstance gateway instance id, default "ble-gateway.0"
+     * @param onConnectionChange optional, called with true once the gateway acknowledged a subscription
+     *     and with false when the gateway stops or a subscription fails
      */
-    constructor(adapter, gatewayInstance = 'ble-gateway.0') {
+    constructor(adapter, gatewayInstance = 'ble-gateway.0', onConnectionChange) {
         this.adapter = adapter;
         this.gateway = gatewayInstance;
-        this.connId = `${this.gateway}.info.connection`;
+        this.aliveId = `system.adapter.${this.gateway}.alive`;
+        this.onConnectionChange = onConnectionChange;
+    }
+    /** True while the gateway instance is running (its `alive` state is true). */
+    isGatewayAlive() {
+        return this.gatewayAlive;
     }
     /**
      * Register (or replace) a subscription and start receiving packets.
+     * If the gateway is not running, the subscription is sent as soon as it starts.
      * Re-subscribes automatically if the gateway restarts.
      */
     async subscribe(subscriptionId, filter, onPacket, minIntervalMs) {
         this.entries.set(subscriptionId, { filter, minIntervalMs, handler: onPacket });
         await this.ensureWatching();
+        if (!this.gatewayAlive) {
+            this.adapter.log.warn(`${this.gateway} is not running — subscription '${subscriptionId}' is sent when it starts`);
+            return;
+        }
         await this.sendSubscribe(subscriptionId);
     }
     /** Remove one subscription (or all when no id is given). */
     async unsubscribe(subscriptionId) {
         if (subscriptionId) {
             this.entries.delete(subscriptionId);
-            await this.send('unsubscribe', { subscriptionId });
+            this.pending.delete(subscriptionId);
         }
         else {
             this.entries.clear();
-            await this.send('unsubscribe', {});
+            this.pending.clear();
+        }
+        if (this.gatewayAlive) {
+            await this.send('unsubscribe', subscriptionId ? { subscriptionId } : {}, UNSUBSCRIBE_TIMEOUT_MS);
         }
     }
     /** Call from your adapter's `message` handler. Returns true if it was a packet for us. */
@@ -89,34 +121,48 @@ class BleGatewayClient {
         entry.handler(this.decode(raw));
         return true;
     }
-    /** Call from your adapter's `stateChange` handler so re-subscribe works on gateway restart. */
+    /**
+     * Call from your adapter's `stateChange` handler. Watches the gateway's `alive` state:
+     * the gateway forgets all subscriptions when it restarts, so they are sent again
+     * as soon as it is back.
+     */
     handleStateChange(id, state) {
-        if (id !== this.connId) {
+        if (id !== this.aliveId || !this.aliveKnown || this.destroyed) {
             return;
         }
-        const connected = !!state?.val;
-        // Re-subscribe on a false→true transition (gateway (re)started).
-        if (connected && !this.lastConnected) {
-            this.adapter.log.info('ble-gateway came online — re-subscribing');
-            for (const id2 of this.entries.keys()) {
-                void this.sendSubscribe(id2);
+        // `alive` is refreshed periodically (true → true) and deleted (null) when it expires after a crash.
+        const alive = !!state?.val;
+        if (alive === this.gatewayAlive) {
+            return;
+        }
+        this.gatewayAlive = alive;
+        if (alive) {
+            if (this.entries.size) {
+                this.adapter.log.info(`${this.gateway} started — re-subscribing`);
+                this.clearFlushTimer();
+                this.queueSubscribe(this.entries.keys(), RESUBSCRIBE_DELAY_MS);
             }
         }
-        this.lastConnected = connected;
+        else {
+            this.adapter.log.warn(`${this.gateway} stopped — waiting for it to come back`);
+            this.clearFlushTimer();
+            this.pending.clear();
+            this.setConnected(false);
+        }
     }
     /** Unsubscribe everything and stop watching the gateway. Call from onUnload. */
     async destroy() {
-        try {
-            await this.send('unsubscribe', {});
-        }
-        catch {
-            // ignore
-        }
+        this.destroyed = true;
+        this.clearFlushTimer();
+        this.pending.clear();
         this.entries.clear();
+        if (this.gatewayAlive) {
+            await this.send('unsubscribe', {}, UNSUBSCRIBE_TIMEOUT_MS);
+        }
         if (this.watching) {
-            this.watching = false;
+            this.watching = null;
             try {
-                await this.adapter.unsubscribeForeignStatesAsync(this.connId);
+                await this.adapter.unsubscribeForeignStatesAsync(this.aliveId);
             }
             catch {
                 // ignore
@@ -124,38 +170,109 @@ class BleGatewayClient {
         }
     }
     // --- internals ---------------------------------------------------------
-    async ensureWatching() {
-        if (this.watching) {
+    ensureWatching() {
+        this.watching ||= (async () => {
+            try {
+                await this.adapter.subscribeForeignStatesAsync(this.aliveId);
+                const st = await this.adapter.getForeignStateAsync(this.aliveId);
+                this.gatewayAlive = !!st?.val;
+            }
+            catch (e) {
+                // Unknown state: try to subscribe anyway, a missing gateway shows up as a timeout.
+                this.adapter.log.debug(`${this.gateway} watch failed: ${e.message}`);
+                this.gatewayAlive = true;
+            }
+            this.aliveKnown = true;
+        })();
+        return this.watching;
+    }
+    setConnected(connected) {
+        if (connected !== this.connected) {
+            this.connected = connected;
+            this.onConnectionChange?.(connected);
+        }
+    }
+    clearFlushTimer() {
+        if (this.flushTimer) {
+            clearTimeout(this.flushTimer);
+            this.flushTimer = null;
+        }
+    }
+    /** Send the given subscriptions after `delayMs` (joins an already scheduled send). */
+    queueSubscribe(ids, delayMs) {
+        for (const id of ids) {
+            this.pending.add(id);
+        }
+        if (this.flushTimer || this.destroyed) {
             return;
         }
-        this.watching = true;
-        try {
-            await this.adapter.subscribeForeignStatesAsync(this.connId);
-            const st = await this.adapter.getForeignStateAsync(this.connId);
-            this.lastConnected = !!st?.val;
-        }
-        catch (e) {
-            this.adapter.log.debug(`ble-gateway watch failed: ${e.message}`);
-        }
+        this.flushTimer = setTimeout(() => {
+            this.flushTimer = null;
+            if (!this.gatewayAlive || this.destroyed) {
+                return;
+            }
+            const ids = [...this.pending];
+            this.pending.clear();
+            for (const id of ids) {
+                void this.sendSubscribe(id);
+            }
+        }, delayMs);
     }
-    sendSubscribe(subscriptionId) {
+    async sendSubscribe(subscriptionId) {
         const entry = this.entries.get(subscriptionId);
         if (!entry) {
-            return Promise.resolve();
+            return;
         }
-        return new Promise(resolve => {
-            this.adapter.sendTo(this.gateway, 'subscribe', { subscriptionId, filter: entry.filter, minIntervalMs: entry.minIntervalMs }, (res) => {
-                const r = res;
-                if (r?.error) {
-                    this.adapter.log.warn(`ble-gateway subscribe '${subscriptionId}' failed: ${r.error}`);
-                }
-                resolve();
-            });
-        });
+        const res = await this.send('subscribe', { subscriptionId, filter: entry.filter, minIntervalMs: entry.minIntervalMs }, SUBSCRIBE_TIMEOUT_MS);
+        if (this.destroyed || this.entries.get(subscriptionId) !== entry) {
+            return; // unsubscribed or replaced meanwhile
+        }
+        if (res.ok) {
+            const r = res.result;
+            if (!r?.error) {
+                this.setConnected(true);
+                return;
+            }
+            this.adapter.log.warn(`${this.gateway} subscribe '${subscriptionId}' failed: ${r.error}`);
+            this.setConnected(false);
+            return;
+        }
+        this.setConnected(false);
+        if (!this.gatewayAlive) {
+            return; // the gateway stopped meanwhile — sent again when it is back
+        }
+        if (res.timeout) {
+            // The gateway may still be starting up — try again.
+            this.adapter.log.warn(`${this.gateway} did not answer subscribe '${subscriptionId}' — retrying`);
+            this.queueSubscribe([subscriptionId], RETRY_DELAY_MS);
+        }
+        else {
+            this.adapter.log.warn(`${this.gateway} subscribe '${subscriptionId}' failed: ${res.error}`);
+        }
     }
-    send(command, message) {
+    /** sendTo with a timeout, so a stopped gateway never leaves us waiting. */
+    send(command, message, timeoutMs) {
         return new Promise(resolve => {
-            this.adapter.sendTo(this.gateway, command, message, () => resolve());
+            // Own timer as well: older js-controllers ignore the timeout option. Only the first resolve() counts.
+            const timer = setTimeout(() => resolve({ ok: false, error: 'timeout', timeout: true }), timeoutMs);
+            const finish = (r) => {
+                clearTimeout(timer);
+                resolve(r);
+            };
+            try {
+                this.adapter.sendTo(this.gateway, command, message, (result) => {
+                    if (result instanceof Error) {
+                        const timeout = /timeout/i.test(result.message);
+                        finish({ ok: false, error: result.message, timeout });
+                    }
+                    else {
+                        finish({ ok: true, result });
+                    }
+                }, { timeout: timeoutMs });
+            }
+            catch (e) {
+                finish({ ok: false, error: e.message, timeout: false });
+            }
         });
     }
     decode(raw) {

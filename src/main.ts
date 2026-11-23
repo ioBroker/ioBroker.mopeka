@@ -216,7 +216,10 @@ class MopekaAdapter extends Adapter {
 
         try {
             await this.source.start(adv => void this.onAdvertisement(adv));
-            await this.setStateAsync('info.connection', true, true);
+            if (!this.gwClient) {
+                // In gateway mode the client reports the connection itself.
+                await this.setStateAsync('info.connection', true, true);
+            }
         } catch (e) {
             this.log.error(`Failed to start BLE source (${this.source.describe()}): ${(e as Error).message}`);
             await this.setStateAsync('info.connection', false, true);
@@ -238,7 +241,12 @@ class MopekaAdapter extends Adapter {
         };
         if (this.config.source === 'gateway') {
             const instance = this.config.gatewayInstance || 'ble-gateway.0';
-            this.gwClient = new BleGatewayClient(this as never, instance);
+            // info.connection follows the gateway: false while it is stopped, true once it confirmed our subscription.
+            this.gwClient = new BleGatewayClient(this as never, instance, connected => {
+                if (!this.stopping) {
+                    void this.setStateAsync('info.connection', connected, true);
+                }
+            });
             return new GatewaySource(log, this.gwClient, instance);
         }
         // direct
@@ -274,7 +282,7 @@ class MopekaAdapter extends Adapter {
     }
 
     private onStateChange(id: string, state: ioBroker.State | null | undefined): void {
-        // In gateway mode the client watches the gateway's connection state to re-subscribe.
+        // In gateway mode the client watches the gateway's alive state to re-subscribe after a restart.
         this.gwClient?.handleStateChange(id, state);
     }
 

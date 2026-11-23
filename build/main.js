@@ -126,7 +126,13 @@ const SENSOR_STATES = [
     { id: 'temperature', name: 'Temperature', type: 'number', role: 'value.temperature', unit: '°C' },
     { id: 'battery_v', name: 'Battery voltage', type: 'number', role: 'value.voltage', unit: 'V' },
     { id: 'battery_pct', name: 'Battery level', type: 'number', role: 'value.battery', unit: '%' },
-    { id: 'quality', name: 'Reading quality (0-3)', type: 'number', role: 'value' },
+    {
+        id: 'quality',
+        name: 'Reading quality (0-3)',
+        type: 'number',
+        role: 'value',
+        states: { 0: 'No valid read', 1: 'Poor contact', 2: 'Normal', 3: 'Optimal' },
+    },
     { id: 'quality_pct', name: 'Reading quality', type: 'number', role: 'value', unit: '%' },
     { id: 'button', name: 'Sync button pressed', type: 'boolean', role: 'indicator' },
     { id: 'rssi', name: 'Signal strength', type: 'number', role: 'value.rssi', unit: 'dBm' },
@@ -179,7 +185,10 @@ class MopekaAdapter extends adapter_core_1.Adapter {
         }
         try {
             await this.source.start(adv => void this.onAdvertisement(adv));
-            await this.setStateAsync('info.connection', true, true);
+            if (!this.gwClient) {
+                // In gateway mode the client reports the connection itself.
+                await this.setStateAsync('info.connection', true, true);
+            }
         }
         catch (e) {
             this.log.error(`Failed to start BLE source (${this.source.describe()}): ${e.message}`);
@@ -200,7 +209,12 @@ class MopekaAdapter extends adapter_core_1.Adapter {
         };
         if (this.config.source === 'gateway') {
             const instance = this.config.gatewayInstance || 'ble-gateway.0';
-            this.gwClient = new ble_gateway_client_1.BleGatewayClient(this, instance);
+            // info.connection follows the gateway: false while it is stopped, true once it confirmed our subscription.
+            this.gwClient = new ble_gateway_client_1.BleGatewayClient(this, instance, connected => {
+                if (!this.stopping) {
+                    void this.setStateAsync('info.connection', connected, true);
+                }
+            });
             return new source_1.GatewaySource(log, this.gwClient, instance);
         }
         // direct
@@ -234,7 +248,7 @@ class MopekaAdapter extends adapter_core_1.Adapter {
         }
     }
     onStateChange(id, state) {
-        // In gateway mode the client watches the gateway's connection state to re-subscribe.
+        // In gateway mode the client watches the gateway's alive state to re-subscribe after a restart.
         this.gwClient?.handleStateChange(id, state);
     }
     async onAdvertisement(adv) {
@@ -310,6 +324,9 @@ class MopekaAdapter extends adapter_core_1.Adapter {
                 };
                 if (s.type === 'number' && s.unit) {
                     common.unit = s.unit;
+                }
+                if (s.states) {
+                    common.states = s.states;
                 }
                 await this.setObjectNotExistsAsync(`${devId}.${s.id}`, {
                     type: 'state',

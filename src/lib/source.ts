@@ -181,6 +181,10 @@ export class GatewaySource implements BleSource {
                 found,
             );
         });
+        if (!this.client.isGatewayAlive()) {
+            await this.client.unsubscribe('mopeka-scan').catch(() => undefined);
+            throw new Error(`${this.gatewayInstance} is not running`);
+        }
         try {
             await sleep(durationMs);
             return [...found.values()].sort((a, b) => b.rssi - a.rssi);

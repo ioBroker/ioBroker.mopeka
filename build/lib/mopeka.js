@@ -19,7 +19,7 @@ const MEDIUM_COEFFICIENTS = {
     air: [0.7373417462, -0.001978229885, 0.00000202162], // also gasoline/diesel/LNG/oil
     water: [0.600592, 0.003124, -0.00001368],
 };
-// Hardware-id (payload byte 0) → human readable model name.
+// Hardware-id (payload byte 0) → human-readable model name.
 const MODELS = {
     0x3: 'Pro Check',
     0x4: 'Pro-200',
