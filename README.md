@@ -18,6 +18,16 @@ The adapter can obtain the advertisements two ways, selectable on the **Main set
    - **Medium** — Propane/LPG, Air/fuel/oil, or Water (used for temperature compensation of the level).
    - **Tank height (mm)** — optional; when set, a fill percentage (`level_pct`) is computed.
 
+## Device manager
+
+The sensors are also listed in the device manager (tab **Devices** of admin, the devices adapter): one card per sensor with the gas bottle, connection, battery, signal strength, fill level, temperature and reading quality. From there you can
+
+- **scan** for new sensors and add them with name and medium,
+- **edit** name, medium, tank height and whether a sensor is enabled,
+- **delete** a sensor.
+
+Every change is saved in the instance configuration; the adapter restarts afterwards. **More** shows all values of a sensor.
+
 ## States
 
 Per sensor, under `mopeka.<instance>.sensors.<name|mac>`:
@@ -38,7 +48,19 @@ Per sensor, under `mopeka.<instance>.sensors.<name|mac>`:
 | `lastUpdate`          | number  |      | Timestamp of last advertisement                |
 | `reachable`           | boolean |      | False after 5 min without a packet             |
 
-`info.connection` is true while the BLE source is active.
+`info.connection` is true while the BLE source is active. In gateway mode it is true once the gateway confirmed the subscription and false while the gateway is stopped.
+
+## Gas bottle widget
+
+The adapter brings the web component `<iob-mopeka-tank>` (`admin/webcomponents/mopeka-tank.json`, listed in `common.webComponents`): each sensor as a gas bottle with its fill level, temperature, battery and reading quality. vis-2, devices and Aura offer it in their widget palettes without any further setup; the tab **Overview** of the instance configuration shows all saved sensors with it (needs admin 8.3.10 or newer).
+
+Settings of the widget:
+
+- **Sensor** — one sensor device below `mopeka.X.sensors`. Empty: all configured sensors of the **Instance**.
+- **Show name**, **Show temperature, battery and quality**.
+- **Warning below (%)** — the liquid turns yellow below this fill level and red below half of it (default 20 %).
+
+Without a tank height the bottle shows the level in mm. The sources are in `src-webcomponents/` (plain TypeScript, no framework); `npm run build:webcomponents` builds them into `admin/webcomponents/`, which is committed.
 
 ## Requirements
 
@@ -52,6 +74,9 @@ Per sensor, under `mopeka.<instance>.sensors.<name|mac>`:
    ### **WORK IN PROGRESS**
 -->
 ### **WORK IN PROGRESS**
+* (@GermanBluefox) Added the device manager: scan, edit, enable/disable and delete sensors
+* (@GermanBluefox) Added the gas bottle widget `<iob-mopeka-tank>` for vis-2, devices, Aura and the admin tab "Overview"
+* (@GermanBluefox) Gateway mode: subscribes again after a restart of ble-gateway
 * (@GermanBluefox) Initial version — Mopeka sensors via direct BLE or ble-gateway, with discovery scan and per-sensor tank calibration.
 
 ## License

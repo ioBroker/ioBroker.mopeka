@@ -20,5 +20,7 @@
     "Name": "名称",
     "MAC address": "MAC 地址",
     "MAC": "MAC",
-    "RSSI": "RSSI"
+    "RSSI": "RSSI",
+    "Overview": "概览",
+    "Shows the saved sensors. The same gas bottle is available as a widget in vis-2, devices and Aura.": "显示已保存的传感器。同样的煤气罐也可作为 vis-2、devices 和 Aura 中的小部件使用。"
 }

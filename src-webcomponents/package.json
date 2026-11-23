@@ -1,0 +1,16 @@
+{
+    "name": "iobroker-web-components-mopeka",
+    "private": true,
+    "version": "0.0.1",
+    "type": "module",
+    "scripts": {
+        "build": "vite build",
+        "check-ts": "tsc --noEmit"
+    },
+    "devDependencies": {
+        "@iobroker/types": "^7.2.5",
+        "@iobroker/web-components": "^0.6.0",
+        "typescript": "~5.9.3",
+        "vite": "^8.3.6"
+    }
+}

@@ -20,5 +20,7 @@
     "Name": "Nom",
     "MAC address": "Adresse MAC",
     "MAC": "MAC",
-    "RSSI": "RSSI"
+    "RSSI": "RSSI",
+    "Overview": "Vue d'ensemble",
+    "Shows the saved sensors. The same gas bottle is available as a widget in vis-2, devices and Aura.": "Affiche les capteurs enregistrés. La même bouteille de gaz est disponible comme widget dans vis-2, devices et Aura."
 }

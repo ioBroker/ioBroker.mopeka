@@ -69,6 +69,12 @@
     "adminUI": {
       "config": "json"
     },
+    "webComponents": [
+      "webcomponents/mopeka-tank.json"
+    ],
+    "supportedMessages": {
+      "deviceManager": true
+    },
     "compact": true,
     "messagebox": true,
     "tier": 3,

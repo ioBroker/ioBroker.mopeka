@@ -3,8 +3,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import type { MopekaAdapterConfig, SensorEntry } from './types';
 import { readHciInfos } from './lib/hci-info';
 import { decodeMopeka, fillPercent, isMediumType, levelMm } from './lib/mopeka';
-import { type BleSource, DirectSource, GatewaySource, type MopekaAdvertisement } from './lib/source';
+import { type BleSource, DirectSource, GatewaySource, type MopekaAdvertisement, type ScanDevice } from './lib/source';
 import { BleGatewayClient } from './lib/ble-gateway-client';
+import { getSensorId } from './lib/sensor-id';
+import { MopekaDeviceManagement } from './lib/DeviceManagement';
 
 interface HciAdapterInfo {
     value: number | string;
@@ -124,14 +126,6 @@ async function listHciAdapters(): Promise<HciAdapterInfo[]> {
     return out;
 }
 
-function sanitizeId(s: string): string {
-    return (s || '').toString().replace(/[^a-zA-Z0-9_]/g, '_');
-}
-
-function macToId(mac: string): string {
-    return mac.toLowerCase().replace(/[^a-f0-9]/g, '');
-}
-
 interface StateDef {
     id: string;
     name: string;
@@ -171,6 +165,7 @@ class MopekaAdapter extends Adapter {
     private gwClient: BleGatewayClient | null = null;
     private stopping = false;
     private staleTimer: NodeJS.Timeout | null = null;
+    private deviceManagement: MopekaDeviceManagement | null = null;
     // lowercased mac → { sensor, lastSeen }
     private byMac: Map<string, { sensor: SensorEntry; lastSeen: number }> = new Map();
 
@@ -191,6 +186,10 @@ class MopekaAdapter extends Adapter {
     }
 
     private async onReady(): Promise<void> {
+        // The device manager only reads the configuration and the states, so it works even while
+        // the BLE source is not (yet) usable.
+        this.deviceManagement = new MopekaDeviceManagement(this);
+
         await this.setStateAsync('info.connection', false, true);
 
         const enabled = this.enabledSensors();
@@ -263,6 +262,7 @@ class MopekaAdapter extends Adapter {
 
     private onUnload(cb: () => void): void {
         this.stopping = true;
+        this.deviceManagement = null;
         if (this.staleTimer) {
             clearInterval(this.staleTimer);
             this.staleTimer = null;
@@ -334,8 +334,53 @@ class MopekaAdapter extends Adapter {
     }
 
     private getSensorId(sensor: SensorEntry): string {
-        const named = sensor.name ? sanitizeId(sensor.name) : '';
-        return `sensors.${named || `s_${macToId(sensor.mac)}`}`;
+        return getSensorId(sensor);
+    }
+
+    /** Object ID of a sensor device relative to the instance, e.g. `sensors.Gas_left` (device manager) */
+    public getDeviceId(sensor: SensorEntry): string {
+        return getSensorId(sensor);
+    }
+
+    /**
+     * Run a discovery scan via the configured source.
+     *
+     * @param durationMs how long to scan; the configured scan duration if not given
+     * @returns the Mopeka sensors seen, strongest signal first
+     */
+    public async scanSensors(durationMs?: number): Promise<ScanDevice[]> {
+        const ms = durationMs || parseInt(this.config.scanDurationMs as string, 10) || 10000;
+        if (!this.source) {
+            this.source = await this.buildSource();
+        }
+        this.log.info(`Scanning for Mopeka sensors via ${this.source.describe()} for ${ms} ms...`);
+        const found = await this.source.scan(ms);
+        this.log.info(`Scan finished: ${found.length} Mopeka sensor(s) found`);
+        return found;
+    }
+
+    /**
+     * Change the list of configured sensors (device manager).
+     *
+     * The in-memory configuration is updated at once, so the device manager shows the change on its
+     * next refresh. The instance object is written a moment later: that restarts the adapter, and the
+     * answer to the GUI must leave before.
+     *
+     * @param mutate receives a copy of the current list and returns the new one
+     */
+    public async updateSensors(mutate: (sensors: SensorEntry[]) => SensorEntry[]): Promise<void> {
+        const current = Array.isArray(this.config.sensors) ? this.config.sensors : [];
+        const sensors = mutate(current.map(s => ({ ...s })));
+        this.config.sensors = sensors;
+        const objId = `system.adapter.${this.namespace}`;
+        const obj = await this.getForeignObjectAsync(objId);
+        if (!obj) {
+            throw new Error(`Instance object ${objId} not found`);
+        }
+        obj.native.sensors = sensors;
+        setTimeout(() => {
+            this.setForeignObject(objId, obj, err => err && this.log.error(`Cannot save configuration: ${err}`));
+        }, 500);
     }
 
     private async syncObjects(sensors: SensorEntry[]): Promise<void> {
@@ -396,7 +441,8 @@ class MopekaAdapter extends Adapter {
     }
 
     private async onAdapterMessage(obj: ioBroker.Message): Promise<void> {
-        if (!obj?.command) {
+        // `dm:*` commands are answered by the device manager, which listens on its own
+        if (!obj?.command || obj.command.startsWith('dm:')) {
             return;
         }
         // In gateway mode, forward inbound BLE packets to the client first.
@@ -462,18 +508,8 @@ class MopekaAdapter extends Adapter {
             parseInt(this.config.scanDurationMs as string, 10) ||
             10000;
 
-        if (!this.source) {
-            try {
-                this.source = await this.buildSource();
-            } catch (e) {
-                reply({ error: (e as Error).message });
-                return;
-            }
-        }
         try {
-            this.log.info(`Scanning for Mopeka sensors via ${this.source.describe()} for ${ms} ms...`);
-            const found = await this.source.scan(ms);
-            this.log.info(`Scan finished: ${found.length} Mopeka sensor(s) found`);
+            const found = await this.scanSensors(ms);
 
             const sensors = Array.isArray(this.config.sensors) ? [...this.config.sensors] : [];
             for (const dev of found) {

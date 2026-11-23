@@ -2,6 +2,28 @@
     "i18n": true,
     "type": "tabs",
     "items": {
+        "_overview": {
+            "type": "panel",
+            "label": "Overview",
+            "items": {
+                "_tanks": {
+                    "type": "custom",
+                    "webComponent": "webcomponents/mopeka-tank.json",
+                    "settings": {
+                        "instance": "mopeka.${_instance}",
+                        "showName": true,
+                        "showDetails": true
+                    },
+                    "height": 300,
+                    "help": "Shows the saved sensors. The same gas bottle is available as a widget in vis-2, devices and Aura.",
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 12,
+                    "lg": 12,
+                    "xl": 12
+                }
+            }
+        },
         "_main": {
             "type": "panel",
             "label": "Main settings",

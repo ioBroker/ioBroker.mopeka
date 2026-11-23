@@ -20,5 +20,7 @@
     "Name": "Ім'я",
     "MAC address": "MAC-адреса",
     "MAC": "MAC",
-    "RSSI": "RSSI"
+    "RSSI": "RSSI",
+    "Overview": "Огляд",
+    "Shows the saved sensors. The same gas bottle is available as a widget in vis-2, devices and Aura.": "Показує збережені датчики. Такий самий газовий балон доступний як віджет у vis-2, devices та Aura."
 }
