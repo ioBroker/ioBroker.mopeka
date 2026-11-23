@@ -18,9 +18,9 @@
     "bluetooth"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.19.0"
   },
-  "os1": [
+  "os": [
     "linux",
     "darwin"
   ],
@@ -60,9 +60,9 @@
     "release": "release-script",
     "test:package": "mocha test/package.test.js --exit",
     "test:integration": "mocha test/testAdapter.test.js --exit",
-    "release-patch": "release-script patch --yes",
-    "release-minor": "release-script minor --yes",
-    "release-major": "release-script major --yes"
+    "release-patch": "release-script patch --yes --no-update-lockfile",
+    "release-minor": "release-script minor --yes --no-update-lockfile",
+    "release-major": "release-script major --yes --no-update-lockfile"
   },
   "bugs": {
     "url": "https://github.com/ioBroker/ioBroker.mopeka/issues"

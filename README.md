@@ -69,14 +69,14 @@ Without a tank height the bottle shows the level in mm. The sources are in `src-
 
 - For **direct** mode: Linux with BlueZ (`apt install bluez libbluetooth-dev`) or macOS, and access to the HCI socket (typically root or `setcap`).
 - For **gateway** mode: a running `ble-gateway` instance; this adapter then needs no local BLE access.
-- Node.js ≥ 20.
+- Node.js ≥ 22.19.0.
 
 ## Changelog
 <!--
    Placeholder for the next version (at the beginning of the line):
    ### **WORK IN PROGRESS**
 -->
-### 0.0.4 (2026-11-23)
+### **WORK IN PROGRESS**
 * (@GermanBluefox) Updated packages
 
 ### 0.0.3 (2026-11-23)
