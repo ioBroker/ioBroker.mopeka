@@ -24,6 +24,25 @@
                 }
             }
         },
+        "_deviceManager": {
+            "type": "panel",
+            "label": "Device manager",
+            "items": {
+                "_dm": {
+                    "type": "deviceManager",
+                    "xs": 12,
+                    "sm": 12,
+                    "md": 12,
+                    "lg": 12,
+                    "xl": 12,
+                    "style": {
+                        "width": "100%",
+                        "height": "100%",
+                        "overflow": "hidden"
+                    }
+                }
+            }
+        },
         "_main": {
             "type": "panel",
             "label": "Main settings",
@@ -139,7 +158,7 @@
                             "filter": true
                         },
                         {
-                            "title": "Medium",
+                            "title": "Tank medium",
                             "attr": "medium",
                             "type": "select",
                             "default": "propane",

@@ -20,7 +20,7 @@ The adapter can obtain the advertisements two ways, selectable on the **Main set
 
 ## Device manager
 
-The sensors are also listed in the device manager (tab **Devices** of admin, the devices adapter): one card per sensor with the gas bottle, connection, battery, signal strength, fill level, temperature and reading quality. From there you can
+The tab **Device manager** of the instance configuration lists the sensors: one card per sensor with the gas bottle, connection, battery, signal strength, fill level, temperature and reading quality. From there you can
 
 - **scan** for new sensors and add them with name and medium,
 - **edit** name, medium, tank height and whether a sensor is enabled,
@@ -52,7 +52,7 @@ Per sensor, under `mopeka.<instance>.sensors.<name|mac>`:
 
 ## Gas bottle widget
 
-The adapter brings the web component `<iob-mopeka-tank>` (`admin/webcomponents/mopeka-tank.json`, listed in `common.webComponents`): each sensor as a gas bottle with its fill level, temperature, battery and reading quality. vis-2, devices and Aura offer it in their widget palettes without any further setup; the tab **Overview** of the instance configuration shows all saved sensors with it (needs admin 8.3.10 or newer).
+The adapter brings the web component `<iob-mopeka-tank>` (`admin/webcomponents/mopeka-tank.json`, listed in `common.webComponents`): each sensor as a gas bottle with its fill level, temperature, battery and reading quality. vis-2, devices and Aura offer it in their widget palettes without any further setup; the tab **Overview** of the instance configuration shows all saved sensors with it. The adapter needs admin 8.3.10 or newer for this.
 
 Settings of the widget:
 
@@ -74,6 +74,8 @@ Without a tank height the bottle shows the level in mm. The sources are in `src-
    ### **WORK IN PROGRESS**
 -->
 ### **WORK IN PROGRESS**
+* (@GermanBluefox) Admin 8.3.10 or newer is required now
+* (@GermanBluefox) Translated the instance settings into all languages
 * (@GermanBluefox) Added the device manager: scan, edit, enable/disable and delete sensors
 * (@GermanBluefox) Added the gas bottle widget `<iob-mopeka-tank>` for vis-2, devices, Aura and the admin tab "Overview"
 * (@GermanBluefox) Gateway mode: subscribes again after a restart of ble-gateway
