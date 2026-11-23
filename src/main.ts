@@ -241,7 +241,7 @@ class MopekaAdapter extends Adapter {
         if (this.config.source === 'gateway') {
             const instance = this.config.gatewayInstance || 'ble-gateway.0';
             // info.connection follows the gateway: false while it is stopped, true once it confirmed our subscription.
-            this.gwClient = new BleGatewayClient(this as never, instance, connected => {
+            this.gwClient = new BleGatewayClient(this, instance, connected => {
                 if (!this.stopping) {
                     void this.setStateAsync('info.connection', connected, true);
                 }

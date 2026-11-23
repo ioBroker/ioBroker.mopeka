@@ -449,5 +449,5 @@ const WORDS = {
 export type WordKey = keyof typeof WORDS;
 
 export function t(key: WordKey): ioBroker.Translated {
-    return WORDS[key] as ioBroker.Translated;
+    return WORDS[key];
 }

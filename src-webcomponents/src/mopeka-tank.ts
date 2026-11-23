@@ -111,8 +111,7 @@ class MopekaTankElement extends IobWebComponent<TankSettings> {
             return null;
         }
         const config = this.objects[`${INSTANCE_PREFIX}${instance}`]?.native as
-            | { sensors?: (SensorIdSource & { enabled?: boolean })[] }
-            | undefined;
+            { sensors?: (SensorIdSource & { enabled?: boolean })[] } | undefined;
         const sensors = Array.isArray(config?.sensors) ? config.sensors : [];
         return sensors
             .filter(sensor => sensor?.mac && sensor.enabled !== false)
