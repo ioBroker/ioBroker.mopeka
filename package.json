@@ -41,7 +41,7 @@
     "@iobroker/legacy-testing": "^4.0.1",
     "@iobroker/testing": "^6.3.2",
     "@types/node": "^22.20.5",
-    "typescript": "~6.0.3"
+    "typescript": "~7.0.2"
   },
   "main": "build/main.js",
   "files": [
